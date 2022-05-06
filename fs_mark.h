@@ -70,6 +70,8 @@ int	dir_policy = DIR_NO_SUBDIRS;
 #define FSYNC_FIRST_FILE	(0x4)
 #define FSYNC_POST_REVERSE	(0x8)
 #define FSYNC_POST_IN_ORDER	(0x10)
+#define FSYNC_DEFERRED_CLOSE	(0x20)
+#define FSYNC_DEFERRED_SYNC		(0x40)
 
 
 #define SYNC_TEST_NONE		(0)	    					/* -S 0 */
@@ -79,7 +81,9 @@ int	dir_policy = DIR_NO_SUBDIRS;
 #define SYNC_TEST_REVERSE_SYNC	(FSYNC_POST_REVERSE | FSYNC_SYNC_SYSCALL)	/* -S 4 */
 #define SYNC_TEST_POST		(FSYNC_POST_IN_ORDER)				/* -S 5 */
 #define SYNC_TEST_POST_SYNC	(FSYNC_POST_IN_ORDER | FSYNC_SYNC_SYSCALL)	/* -S 6 */
-#define NUM_SYNC_METHODS		(7)
+#define SYNC_TEST_DEFERRED_CLOSE	(FSYNC_BEFORE_CLOSE | FSYNC_DEFERRED_CLOSE)	/* -S 7 */
+#define SYNC_TEST_DEFERRED_SYNC	(FSYNC_DEFERRED_SYNC | FSYNC_DEFERRED_CLOSE)	/* -S 8 */
+#define NUM_SYNC_METHODS		(9)
 
 const char sync_policy_string[NUM_SYNC_METHODS][MAX_STRING_SIZE] = {
 	"NO SYNC: Test does not issue sync() or fsync() calls.",
@@ -88,9 +92,10 @@ const char sync_policy_string[NUM_SYNC_METHODS][MAX_STRING_SIZE] = {
 	"POST REVERSE: Reopen and fsync() each file in reverse order after main write loop.",
 	"SYNC POST REVERSE: Issue sync() and then reopen and fsync() each file in reverse order after main write loop.",
 	"POST: Reopen and fsync() each file in order after main write loop.",
-	"SYNC POST: Issue sync() and then reopen and fsync() each file in order after main write loop."
+	"SYNC POST: Issue sync() and then reopen and fsync() each file in order after main write loop.",
+	"INBAND FSYNC DEFERRED CLOSE: Issue sync() after each file write but only close files after all files' wrties are done.",
+	"DEFERRED FSYNC & CLOSE: sync() and close() all files only after all the files have been written to."
 };
-
 
 /*
  * Use the normal fsync() per file by default

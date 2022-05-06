@@ -67,7 +67,7 @@ void usage(void)
 		"\t-F <run until FS full>\n",
 		"\t-S Sync Method (0:No Sync, 1:fsyncBeforeClose, "
 		"2:sync/1_fsync, 3:PostReverseFsync, "
-		"4:syncPostReverseFsync, 5:PostFsync, 6:syncPostFsync)\n",
+		"4:syncPostReverseFsync, 5:PostFsync, 6:syncPostFsync), 7:fsyncDeferredClose, 8:deferredFsyncAndClose\n",
 		"\t[-D number (of subdirectories)]\n",
 		"\t[-N number (of files in each subdirectory in Round Robin mode)]\n",
 		"\t[-d dir1 ... -d dirN]\n", "\t[-l log_file_name]\n",
@@ -204,7 +204,12 @@ void process_args(int argc, char **argv, char **envp)
 			case 6:
 				sync_method = SYNC_TEST_POST_SYNC;
 				break;
-
+			case 7:
+				sync_method = SYNC_TEST_DEFERRED_CLOSE;
+				break;
+			case 8:
+				sync_method = SYNC_TEST_DEFERRED_SYNC;
+				break;
 			default:
 				fprintf(stderr, "Max filename size is %d\n",
 					FILENAME_SIZE);
@@ -632,6 +637,7 @@ void do_run(pid_t my_pid)
 	unsigned long long avg_sync_usec, app_overhead_usec;
 	char file_write_name[MAX_NAME_PATH + FILENAME_SIZE];
 	char file_target_name[MAX_NAME_PATH + FILENAME_SIZE];
+	int open_files[MAX_FILES];
 
 	/*
 	 * Verify that there is enough space for this run.
@@ -728,20 +734,26 @@ void do_run(pid_t my_pid)
 				min_fsync_usec = delta;
 		}
 
-		/*
-		 * Time the file close
-		 */
-		start(0);
-		close(fd);
-		delta = stop(0, 0);
+		if (sync_method & FSYNC_DEFERRED_CLOSE) {
+			/* Add the file desc to open files list to close
+			 * later
+			 */
+			open_files[file_index] = fd;
+		} else {
+			/*
+			 * Time the file close
+			 */
+			start(0);
+			close(fd);
+			delta = stop(0, 0);
 
-		close_usec += delta;
-		if (delta > max_close_usec)
-			max_close_usec = delta;
+			close_usec += delta;
+			if (delta > max_close_usec)
+				max_close_usec = delta;
 
-		if ((min_close_usec == 0) || (delta < min_close_usec))
-			min_close_usec = delta;
-
+			if ((min_close_usec == 0) || (delta < min_close_usec))
+				min_close_usec = delta;
+		}
 	}
 
 	if (sync_method & FSYNC_SYNC_SYSCALL) {
@@ -857,6 +869,47 @@ void do_run(pid_t my_pid)
 
 		close(fd);
 		fsync_usec += stop(0, 0);
+	}
+
+	/*
+	 * Syncing all the open files together
+	 */
+	if (sync_method & FSYNC_DEFERRED_SYNC) {
+		for (file_index = 0; file_index < num_files; ++file_index) {
+			start(0);
+
+			if (fsync(open_files[file_index]) == -1) {
+				fprintf(stderr, "fs_mark: fsync failed %s\n",
+					strerror(errno));
+				cleanup_exit();
+			}
+			delta = stop(0, 0);
+			fsync_usec += delta;
+
+			if (delta > max_fsync_usec)
+				max_fsync_usec = delta;
+			if ((min_fsync_usec == 0) || (delta < min_fsync_usec))
+				min_fsync_usec = delta;
+		}
+	}
+
+	/*
+	 * Closing all the open files together
+	 */
+	if (sync_method & FSYNC_DEFERRED_CLOSE) {
+		for (file_index = 0; file_index < num_files; ++file_index) {
+			int delta;
+			start(0);
+			close(open_files[file_index]);
+			delta = stop(0, 0);
+
+			close_usec += delta;
+			if (delta > max_close_usec)
+				max_close_usec = delta;
+
+			if ((min_close_usec == 0) || (delta < min_close_usec))
+				min_close_usec = delta;
+		}
 	}
 
 	/*
