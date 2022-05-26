@@ -61,7 +61,7 @@ void cleanup_exit(void)
 void usage(void)
 {
 	fprintf(stderr,
-		"Usage: fs_mark\n%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s",
+		"Usage: fs_mark\n%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s",
 		"\t-h <print usage and exit>\n",
 		"\t-k <keep files after each iteration>\n",
 		"\t-F <run until FS full>\n",
@@ -78,7 +78,8 @@ void usage(void)
 		"\t[-r number (of random bytes in file names)]\n",
 		"\t[-s byte_count (size in bytes of each file)]\n",
 		"\t[-t number (of total threads)]\n",
-		"\t[-w number (of bytes per write() syscall)]\n");
+		"\t[-w number (of bytes per write() syscall)]\n",
+		"\t[-f truncate the file to desired size before write]\n");
 	cleanup_exit();
 	return;
 }
@@ -94,7 +95,7 @@ void process_args(int argc, char **argv, char **envp)
 	 * Parse all of the options that the user specified.
 	 */
 	while ((ret =
-		getopt(argc, argv, "vhkFr:S:N:D:d:l:L:n:p:s:t:w:")) != EOF) {
+		getopt(argc, argv, "vhkFr:S:N:D:d:l:L:n:p:s:t:w:f:")) != EOF) {
 		switch (ret) {
 		case 'v':	/* verbose stats */
 			verbose_stats = 1;
@@ -233,6 +234,10 @@ void process_args(int argc, char **argv, char **envp)
 					MAX_IO_BUFFER_SIZE);
 				usage();
 			}
+			break;
+
+		case 'f':
+			ftrunc_size = atoi(optarg);
 			break;
 
 		case 'h':	/* Print usage and exit */
@@ -538,7 +543,7 @@ unsigned long long get_bytes_free(char *dir_name)
 }
 
 /*
- * This routine opens, writes the amount of (zero filled) data to a file.
+ * This routine writes the amount of (zero filled) data to a file.
  * It chunks IO requests into the specified buffer size.  The data is just zeroed, 
  * nothing in the kernel inspects the contents of the buffer on its way to disk.
  */
@@ -558,6 +563,16 @@ void write_file(int fd,
 	write_size = io_buffer_size;
 	sz_left = sz;
 	local_write_usec = 0ULL;
+
+	if (ftrunc_size > 0) {
+		/* Truncate the file to sz bytes before writing */
+		if ((ftruncate(fd, ftrunc_size)) < 0 ) {
+			fprintf(stderr,
+				"fs_mark: write_file ftruncate failed: %d %s\n",
+				ret, strerror(errno));
+			cleanup_exit();
+		}
+	}
 
 	do {
 		if (write_size > sz_left)
@@ -1278,6 +1293,9 @@ void print_run_info(FILE * log_fp, int argc, char **argv)
 	fprintf(log_fp,
 		"#\tFiles info: size %d bytes, written with an IO size of %d bytes per write\n",
 		file_size, io_buffer_size);
+	fprintf(log_fp,
+		"#\tFtruncate info: File will be ftruncated to %d bytes before write\n",
+		ftrunc_size);
 	fprintf(log_fp,
 		"#\tApp overhead is time in microseconds spent in the test not doing file writing related system calls.\n");
 

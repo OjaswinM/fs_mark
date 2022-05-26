@@ -111,6 +111,7 @@ unsigned int	file_size = DEFAULT_FILE_SIZE;	/* File size to create during run  *
 int	num_files = DEFAULT_NUM_FILES;		/* Number of times to test each file size */
 int	name_len = DEFAULT_NAME_LEN;		/* Number of characters in a filename */
 int	rand_len = DEFAULT_RAND_NAME;		/* Number of random characters in a filename */
+int ftrunc_size = 0;	/* desired size to be truncated before write */
 
 /*
  * Variables to control how many subdirectories & how to fill them
@@ -121,7 +122,6 @@ int	num_dirs = 0;				/* Number of directories passed in as args */
 int 	files_in_subdir = 0;
 int 	current_subdir = 0;
 unsigned long secs_per_directory = DEFAULT_SECS_PER_DIR;
-
 
 /*
  * Misc booleans & globals
